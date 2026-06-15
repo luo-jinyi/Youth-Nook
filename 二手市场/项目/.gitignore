@@ -1,0 +1,68 @@
+# 虚拟环境
+.venv/
+venv/
+ENV/
+
+# Python 缓存文件
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+
+# Streamlit 相关
+.streamlit/
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# VS Code 配置
+.vscode/
+*.code-workspace
+
+# ========== 新增：密码/密钥保护规则 ==========
+# 环境变量（存放密码、API密钥）
+.env
+.env.local
+.env.development
+.env.production
+.env.test
+.env.*
+
+# 密钥、密码配置文件
+*.secret
+*.key
+*.pem
+*.crt
+*.p12
+*.pfx
+secrets.json
+secret.yaml
+config_secret.json
+db_config.ini
+database.conf
+password.txt
+secret.txt
+
+# 数据库文件
+*.db
+*.sqlite
+*.sqlite3
+*.mdb
+
+# 私钥 SSH
+id_rsa
+id_ecdsa
+*.ssh
+
+# Python 凭证
+.pypirc
+pip.conf
+
+# Jupyter
+.ipynb_checkpoints/
+# Created by venv; see https://docs.python.org/3/library/venv.html
+

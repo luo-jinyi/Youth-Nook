@@ -1,0 +1,23 @@
+{
+  "items": [
+    {
+      "id": 1,
+      "title": "书",
+      "description": "三本书",
+      "price": 15.0,
+      "category": "教材书籍",
+      "contact": "123456789",
+      "admin_password": "",
+      "messages": [
+        {
+          "name": "11",
+          "contact": "2222222",
+          "content": "我要",
+          "time": "06-15 21:09"
+        }
+      ],
+      "created_at": "2026-06-15 21:09"
+    }
+  ],
+  "next_id": 2
+}
