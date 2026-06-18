@@ -161,6 +161,7 @@ def add_item(title: str, desc: str, price: float, category: str,
         "user_id": user_id,  # 发帖者用户ID，None表示未登录发布
         "images": images_base64 or [],  # Base64编码的图片列表
         "messages": [],  # 每条消息: {name, contact, content, time}
+        "status": "available",  # "available" - 在售, "sold" - 已售出
         "created_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
     }
     data["items"].insert(0, item)
@@ -205,6 +206,64 @@ def delete_item(item_id: int) -> bool:
             st.session_state.favorites.remove(item_id)
         return True
     return False
+
+
+def mark_item_sold(item_id: int) -> bool:
+    """将商品标记为已售出，并通知所有留言过的用户"""
+    data = get_cached_data()
+    for item in data["items"]:
+        if item["id"] == item_id:
+            item["status"] = "sold"
+            
+            # 获取所有留言过的用户ID
+            messaged_user_ids = set()
+            for msg in item.get("messages", []):
+                if msg.get("user_id"):
+                    messaged_user_ids.add(msg["user_id"])
+            
+            # 为每个留言过的用户添加通知
+            for user_id in messaged_user_ids:
+                add_notification(user_id, f"您留言的商品「{item['title']}」已售出", item_id)
+            
+            save_data(data)
+            invalidate_cache()
+            return True
+    return False
+
+
+def add_notification(user_id: int, message: str, item_id: int = None) -> None:
+    """添加用户通知"""
+    data = get_cached_data()
+    if "notifications" not in data:
+        data["notifications"] = []
+    
+    notification = {
+        "id": len(data["notifications"]) + 1,
+        "user_id": user_id,
+        "message": message,
+        "item_id": item_id,
+        "read": False,
+        "created_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+    }
+    data["notifications"].append(notification)
+    save_data(data)
+
+
+def get_user_notifications(user_id: int) -> list:
+    """获取用户的通知列表"""
+    data = get_cached_data()
+    notifications = data.get("notifications", [])
+    return [n for n in notifications if n["user_id"] == user_id]
+
+
+def mark_notification_read(notification_id: int) -> None:
+    """标记通知为已读"""
+    data = get_cached_data()
+    for n in data.get("notifications", []):
+        if n["id"] == notification_id:
+            n["read"] = True
+            break
+    save_data(data)
 
 
 def get_item_by_id(item_id: int) -> Optional[dict]:
@@ -399,11 +458,48 @@ def render_user_info_panel() -> None:
     user = st.session_state["current_user"]
     st.header("👤 个人中心")
     
-    st.markdown(f"""
-    <div style="background:#e8f5e9;border-radius:8px;padding:1rem;margin-bottom:1rem;border-left:3px solid #4caf50">
-        <div><b>用户名</b>：{user['username']}</div>
-        <div><b>联系方式</b>：{user.get('contact', '未设置')}</div>
-        <div><b>注册时间</b>：{user['created_at']}</div>
+    # 显示用户通知
+    notifications = get_user_notifications(user["id"])
+    unread_notifications = [n for n in notifications if not n.get("read", False)]
+    theme = st.session_state.get("theme", "cyber")
+    if unread_notifications:
+        st.subheader("🔔 通知消息")
+        for n in unread_notifications:
+            if theme == "cyber":
+                st.markdown(f"""
+            <div style="background:rgba(255, 215, 0, 0.15);border-radius:4px;padding:0.6rem 1rem;margin-bottom:0.5rem;border-left:3px solid #ffd700;box-shadow:0 0 10px rgba(255, 215, 0, 0.3)">
+                <div style="color:#ffd700;"><b>{n['message']}</b></div>
+                <div style="font-size:0.8rem;color:#b0b0b0;text-shadow:0 0 3px rgba(176, 176, 176, 0.3)">{n['created_at']}</div>
+            </div>
+            """, unsafe_allow_html=True)
+            else:
+                st.markdown(f"""
+            <div style="background:white;border-radius:8px;padding:0.6rem 1rem;margin-bottom:0.5rem;border-left:3px solid #f39c12;box-shadow:0 2px 8px rgba(0, 0, 0, 0.06)">
+                <div style="color:#f39c12;"><b>{n['message']}</b></div>
+                <div style="font-size:0.8rem;color:#636e72;">{n['created_at']}</div>
+            </div>
+            """, unsafe_allow_html=True)
+            if st.button(f"✓ 已读", key=f"read_notif_{n['id']}"):
+                mark_notification_read(n["id"])
+                st.rerun()
+        st.divider()
+    
+    # 根据主题显示用户信息面板
+    theme = st.session_state.get("theme", "cyber")
+    if theme == "cyber":
+        st.markdown(f"""
+    <div style="background:rgba(0, 255, 245, 0.1);border-radius:4px;padding:1rem;margin-bottom:1rem;border-left:3px solid #00fff5;box-shadow:0 0 15px rgba(0, 255, 245, 0.2)">
+        <div style="color:#00fff5;"><b>用户名</b>：{user['username']}</div>
+        <div style="color:#f0f0f0;"><b>联系方式</b>：{user.get('contact', '未设置')}</div>
+        <div style="color:#b0b0b0;"><b>注册时间</b>：{user['created_at']}</div>
+    </div>
+    """, unsafe_allow_html=True)
+    else:
+        st.markdown(f"""
+    <div style="background:white;border-radius:8px;padding:1rem;margin-bottom:1rem;border-left:3px solid #667eea;box-shadow:0 2px 10px rgba(0, 0, 0, 0.08)">
+        <div style="color:#667eea;"><b>用户名</b>：{user['username']}</div>
+        <div style="color:#333333;"><b>联系方式</b>：{user.get('contact', '未设置')}</div>
+        <div style="color:#636e72;"><b>注册时间</b>：{user['created_at']}</div>
     </div>
     """, unsafe_allow_html=True)
     
@@ -418,13 +514,18 @@ def render_user_info_panel() -> None:
         st.caption(f"共发布了 {len(user_items)} 件商品")
         for item in user_items:
             iid = item["id"]
+            item_status = item.get("status", "available")
             
             # 使用 Streamlit 原生组件构建卡片
             with st.container():
                 # 标题和价格
                 col1, col2 = st.columns([4, 1])
                 with col1:
-                    st.subheader(item['title'])
+                    # 显示商品状态
+                    status_badge = ""
+                    if item_status == "sold":
+                        status_badge = "<span style='background:#e74c3c;color:white;padding:0.2rem 0.5rem;border-radius:4px;font-size:0.8rem;margin-left:0.5rem'>已售出</span>"
+                    st.markdown(f"<h4>{item['title']} {status_badge}</h4>", unsafe_allow_html=True)
                     st.markdown(f"{item['category']} · {item['created_at']}")
                 with col2:
                     st.markdown(f"<h2 style='color:#e74c3c;text-align:right;margin:0'>¥{item['price']:.2f}</h2>", unsafe_allow_html=True)
@@ -447,17 +548,29 @@ def render_user_info_panel() -> None:
                 st.caption(f"📩 共 {len(msgs)} 条留言")
                 for m in msgs:
                     st.markdown(f"""
-                    <div style="background:#fff8e1;border-radius:8px;padding:0.6rem 1rem;margin-bottom:0.5rem;border-left:3px solid #ffa000;color:#333333">
-                        <div><b>{m['name']}</b> <span class="meta">({m.get('contact','')})  · {m['time']}</span></div>
-                        <div style="margin-top:0.3rem">{m['content']}</div>
+                    <div style="background:rgba(255, 0, 255, 0.1);border-radius:4px;padding:0.6rem 1rem;margin-bottom:0.5rem;border-left:3px solid #ff00ff;color:#f0f0f0;box-shadow:0 0 8px rgba(255, 0, 255, 0.2)">
+                        <div style="color:#ff00ff;"><b>{m['name']}</b> <span class="meta">({m.get('contact','')})  · {m['time']}</span></div>
+                        <div style="margin-top:0.3rem;color:#f0f0f0">{m['content']}</div>
                     </div>
                     """, unsafe_allow_html=True)
             else:
                 st.info("暂无留言")
             
-            # 删除帖子按钮
-            if st.button(f"🗑️ 删除帖子 {item['title']}", key=f"user_del_{iid}", type="secondary"):
-                st.session_state[f"confirm_del_{iid}"] = True
+            # 操作按钮行
+            btn_cols = st.columns(2)
+            with btn_cols[0]:
+                # 标记为已售出按钮（仅在售时显示）
+                if item_status == "available":
+                    if st.button(f"✅ 标记为已售出", key=f"mark_sold_{iid}", type="primary"):
+                        if mark_item_sold(iid):
+                            st.success("✅ 已标记为售出，已通知留言用户")
+                            st.rerun()
+                        else:
+                            st.error("标记失败")
+            with btn_cols[1]:
+                # 删除帖子按钮
+                if st.button(f"🗑️ 删除帖子", key=f"user_del_{iid}", type="secondary"):
+                    st.session_state[f"confirm_del_{iid}"] = True
             
             # 删除确认对话框
             if st.session_state.get(f"confirm_del_{iid}", False):
@@ -544,12 +657,27 @@ def render_item_card(item: dict) -> None:
     else:
         user_display = "👤 匿名发布"
     
+    # 检查当前用户是否已经给这个商品留过言
+    current_user = st.session_state.get("current_user")
+    has_messaged = st.session_state.get(f"has_messaged_{item['id']}", False)
+    
+    # 如果用户已留言且商品有联系方式，显示卖家联系方式
+    seller_contact = item.get("contact", "")
+    if has_messaged and seller_contact:
+        user_display += f" · 📞 {seller_contact}"
+    
+    # 检查商品状态
+    item_status = item.get("status", "available")
+    status_badge = ""
+    if item_status == "sold":
+        status_badge = "<span style='background:#e74c3c;color:white;padding:0.2rem 0.5rem;border-radius:4px;font-size:0.8rem;margin-left:0.5rem'>已售出</span>"
+    
     # 使用 Streamlit 原生组件构建卡片
     with st.container():
         # 标题和价格
         col1, col2 = st.columns([4, 1])
         with col1:
-            st.subheader(item['title'])
+            st.markdown(f"<h4>{item['title']} {status_badge}</h4>", unsafe_allow_html=True)
             st.markdown(f"{user_display} · {item['category']} · {item['created_at']}")
         with col2:
             st.markdown(f"<h2 style='color:#e74c3c;text-align:right;margin:0'>¥{item['price']:.2f}</h2>", unsafe_allow_html=True)
@@ -597,7 +725,10 @@ def render_message_form(item_id: int, key_prefix: str = "") -> None:
                 else:
                     user_id = current_user["id"] if current_user else None
                     add_message(item_id, msg_name, msg_contact, msg_content, user_id)
-                    st.success("✅ 留言已发送！卖家将尽快回复")
+                    
+                    # 设置已留言标记，让商品卡片显示卖家联系方式
+                    st.session_state[f"has_messaged_{item_id}"] = True
+                    
                     st.session_state[show_key] = False
                     st.rerun()
 
@@ -630,9 +761,9 @@ def render_public_messages(item: dict) -> None:
         st.caption(f"💬 共 {len(msgs)} 条留言")
         for m in msgs:
             st.markdown(f"""
-            <div style="background:#fff8e1;border-radius:8px;padding:0.6rem 1rem;margin-bottom:0.5rem;border-left:3px solid #ffa000;color:#333333">
-                <div><b>{m['name']}</b> <span class="meta">· {m['time']}</span></div>
-                <div style="margin-top:0.3rem">{m['content']}</div>
+            <div style="background:rgba(255, 0, 255, 0.1);border-radius:4px;padding:0.6rem 1rem;margin-bottom:0.5rem;border-left:3px solid #ff00ff;color:#f0f0f0;box-shadow:0 0 8px rgba(255, 0, 255, 0.2)">
+                <div style="color:#ff00ff;"><b>{m['name']}</b> <span class="meta">· {m['time']}</span></div>
+                <div style="margin-top:0.3rem;color:#f0f0f0">{m['content']}</div>
             </div>
             """, unsafe_allow_html=True)
 
@@ -684,9 +815,9 @@ def render_admin_panel(item: dict, key_prefix: str = "") -> None:
                 st.caption(f"📩 共 {len(msgs)} 条留言（仅卖家可见）")
                 for m in msgs:
                     st.markdown(f"""
-                    <div style="background:#fff8e1;border-radius:8px;padding:0.6rem 1rem;margin-bottom:0.5rem;border-left:3px solid #ffa000;color:#333333">
-                        <div><b>{m['name']}</b> <span class="meta">({m.get('contact','')})  · {m['time']}</span></div>
-                        <div style="margin-top:0.3rem">{m['content']}</div>
+                    <div style="background:rgba(255, 0, 255, 0.1);border-radius:4px;padding:0.6rem 1rem;margin-bottom:0.5rem;border-left:3px solid #ff00ff;color:#f0f0f0;box-shadow:0 0 8px rgba(255, 0, 255, 0.2)">
+                        <div style="color:#ff00ff;"><b>{m['name']}</b> <span class="meta">({m.get('contact','')})  · {m['time']}</span></div>
+                        <div style="margin-top:0.3rem;color:#f0f0f0">{m['content']}</div>
                     </div>
                     """, unsafe_allow_html=True)
 
@@ -701,29 +832,187 @@ if "favorites" not in st.session_state:
     fav_ids = {i["id"] for i in get_all_items() if i.get("favorited")}
     st.session_state.favorites = fav_ids
 
-# ─── 自定义样式 ─────────────────────────────────────────
-st.markdown("""
+# 初始化主题状态
+if "theme" not in st.session_state:
+    st.session_state.theme = "cyber"
+
+# ─── 主题样式 ─────────────────────────────────────────
+def get_theme_css(theme: str) -> str:
+    if theme == "cyber":
+        return """
 <style>
-    .card {
-        border: 1px solid #e0e0e0;
-        border-radius: 12px;
-        padding: 1.2rem 1rem;
-        margin-bottom: 1rem;
-        background: #fafafa;
-    }
-    .card h4 { margin: 0 0 0.3rem 0;color: #333333 }
-    .price { color: #e74c3c; font-weight: bold; font-size: 1.2rem; }
-    .tag {
-        display: inline-block;
-        background: #e8f0fe;
-        color: #1a73e8;
-        padding: 0.15rem 0.6rem;
-        border-radius: 20px;
-        font-size: 0.8rem;
-    }
-    .meta { color: #888; font-size: 0.85rem; }
+    body { background: linear-gradient(135deg, #0a0a0f 0%, #1a1a2e 100%); min-height: 100vh; }
+    .stMain { background: #0d0d15; }
+    header[data-testid="stHeader"] { background: rgba(10, 10, 15, 0.95); border-bottom: 1px solid #00fff5; }
+    .card { border: 1px solid #00fff5; border-radius: 4px; padding: 1.5rem; margin-bottom: 1.2rem; background: rgba(13, 13, 21, 0.95); box-shadow: 0 0 15px rgba(0, 255, 245, 0.2); transition: all 0.3s ease; }
+    .card:hover { transform: translateY(-3px); box-shadow: 0 0 25px rgba(0, 255, 245, 0.4); border-color: #ff00ff; }
+    .card h4 { margin: 0 0 0.5rem 0; color: #00fff5; font-size: 1.2rem; font-weight: 600; text-shadow: 0 0 10px rgba(0, 255, 245, 0.5); }
+    .card p, .card div { color: #f0f0f0; }
+    .price { color: #ff00ff; font-weight: 700; font-size: 1.4rem; text-shadow: 0 0 15px rgba(255, 0, 255, 0.6); }
+    .tag { display: inline-block; background: rgba(0, 255, 245, 0.15); color: #00fff5; padding: 0.2rem 0.7rem; border-radius: 2px; font-size: 0.75rem; font-weight: 500; margin-right: 0.3rem; border: 1px solid #00fff5; }
+    .status-sold { background: rgba(255, 0, 255, 0.2); color: #ff00ff; padding: 0.2rem 0.7rem; border-radius: 2px; font-size: 0.8rem; font-weight: 500; border: 1px solid #ff00ff; }
+    .meta { color: #b0b0b0; font-size: 0.85rem; text-shadow: 0 0 3px rgba(176, 176, 176, 0.3); }
+    .stButton>button { border-radius: 4px; font-weight: 500; transition: all 0.3s ease; background: rgba(0, 255, 245, 0.1); border: 1px solid #00fff5; color: #00fff5; }
+    .stButton>button:hover { transform: translateY(-2px); box-shadow: 0 0 15px rgba(0, 255, 245, 0.5); }
+    .stTextInput>div>div>input, .stTextArea>div>div>textarea { border-radius: 4px; border: 1px solid #00fff5; background: rgba(13, 13, 21, 0.95); color: #f0f0f0; }
+    .stTextInput label, .stTextArea label, .stSelectbox label { color: #00fff5 !important; }
+    .stDivider { margin: 1.5rem 0; border-color: #00fff5; }
+    section[data-testid="stSidebar"] { background: linear-gradient(180deg, #0a0a0f 0%, #1a1a2e 100%); border-right: 2px solid #00fff5; box-shadow: 0 0 30px rgba(0, 255, 245, 0.3); }
+    section[data-testid="stSidebar"] > div { background-image: linear-gradient(rgba(0, 255, 245, 0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 255, 245, 0.03) 1px, transparent 1px); background-size: 20px 20px; }
+    section[data-testid="stSidebar"] h1 { color: #00fff5 !important; font-size: 1.5rem !important; text-shadow: 0 0 20px rgba(0, 255, 245, 0.8); border-bottom: 2px solid #00fff5; padding-bottom: 0.5rem; margin-bottom: 1rem; letter-spacing: 2px; }
+    section[data-testid="stSidebar"] .stRadio > div > label { color: #00fff5; padding: 0.8rem 1rem; margin: 0.3rem 0; border: 1px solid transparent; border-radius: 4px; transition: all 0.3s ease; letter-spacing: 1px; }
+    section[data-testid="stSidebar"] .stRadio > div > label:hover { border: 1px solid #00fff5; background: rgba(0, 255, 245, 0.1); }
+    section[data-testid="stSidebar"] .stRadio > div > label[data-checked="true"] { border: 1px solid #ff00ff; background: rgba(255, 0, 255, 0.15); color: #ff00ff; }
+    .stSuccess { background: rgba(0, 255, 245, 0.1); border: 1px solid #00fff5; color: #00fff5; border-radius: 4px; }
+    .stWarning { background: rgba(255, 0, 255, 0.1); border: 1px solid #ff00ff; color: #ff00ff; border-radius: 4px; }
+    .stInfo { background: rgba(0, 255, 245, 0.05); border: 1px solid #00fff5; color: #00fff5; border-radius: 4px; }
+    .stSelectbox > div > div { background: rgba(13, 13, 21, 0.95); border: 1px solid #00fff5; color: #f0f0f0; }
+    .stNumberInput > div > div > input { background: rgba(13, 13, 21, 0.95); border: 1px solid #00fff5; color: #f0f0f0; }
+    .stForm { border: 1px solid #00fff5; background: rgba(13, 13, 21, 0.9); }
+    .stMarkdown, .stText { color: #f0f0f0 !important; }
+    .stCaption { color: #c0c0c0 !important; }
+    h1, h2, h3, h4, h5, h6 { color: #00fff5 !important; text-shadow: 0 0 15px rgba(0, 255, 245, 0.5); }
+    p { color: #f0f0f0 !important; line-height: 1.6; }
+    a { color: #00fff5; }
+    a:hover { color: #ff00ff; }
+    .stAlert, .stException, .stWarning, .stInfo, .stSuccess, .stError { color: #f0f0f0 !important; }
+    .stNumberInput label { color: #00fff5 !important; }
+    .stTabs [data-baseweb="tab-list"] { background: rgba(13, 13, 21, 0.9); }
+    .stTabs [data-baseweb="tab"] { color: #00fff5 !important; }
+    .stTabs [aria-selected="true"] { border-bottom: 2px solid #ff00ff !important; color: #ff00ff !important; }
 </style>
-""", unsafe_allow_html=True)
+"""
+    else:
+        return """
+<style>
+    body { background: linear-gradient(135deg, #f5f7fa 0%, #e4e8ec 100%); min-height: 100vh; }
+    .stMain { background: #f5f7fa; }
+    header[data-testid="stHeader"] { background: white; border-bottom: 1px solid #e0e0e0; }
+    .card { border: 1px solid #e0e0e0; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.2rem; background: white; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08); transition: all 0.3s ease; }
+    .card:hover { transform: translateY(-3px); box-shadow: 0 8px 25px rgba(0, 0, 0, 0.12); }
+    .card h4 { margin: 0 0 0.5rem 0; color: #2d3436; font-size: 1.2rem; font-weight: 600; }
+    .card p, .card div { color: #333333; }
+    .price { color: #e74c3c; font-weight: 700; font-size: 1.4rem; }
+    .tag { display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 0.2rem 0.7rem; border-radius: 20px; font-size: 0.75rem; font-weight: 500; margin-right: 0.3rem; }
+    .status-sold { background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%); color: white; padding: 0.2rem 0.7rem; border-radius: 6px; font-size: 0.8rem; font-weight: 500; }
+    .meta { color: #636e72; font-size: 0.85rem; }
+    .stButton>button { border-radius: 8px; font-weight: 500; transition: all 0.2s ease; }
+    .stTextInput>div>div>input, .stTextArea>div>div>textarea { border-radius: 8px; border: 1px solid #e0e0e0; background: white; color: #333333; }
+    .stTextInput label, .stTextArea label, .stSelectbox label { color: #667eea !important; }
+    .stDivider { margin: 1.5rem 0; border-color: #e0e0e0; }
+    section[data-testid="stSidebar"] { background: linear-gradient(180deg, #a8b5e8 0%, #c4b5d9 100%); border-right: none; }
+    section[data-testid="stSidebar"] > div { background-image: none; }
+    section[data-testid="stSidebar"] h1 { color: white !important; font-size: 1.5rem !important; border-bottom: 2px solid rgba(255, 255, 255, 0.3); padding-bottom: 0.5rem; margin-bottom: 1rem; letter-spacing: 2px; }
+    section[data-testid="stSidebar"] .stRadio > div > label { color: rgba(255, 255, 255, 0.9); padding: 0.8rem 1rem; margin: 0.3rem 0; border: 1px solid transparent; border-radius: 4px; transition: all 0.3s ease; }
+    section[data-testid="stSidebar"] .stRadio > div > label:hover { border: 1px solid rgba(255, 255, 255, 0.3); background: rgba(255, 255, 255, 0.1); }
+    section[data-testid="stSidebar"] .stRadio > div > label[data-checked="true"] { border: 1px solid white; background: rgba(255, 255, 255, 0.2); color: white; }
+    .stSuccess { background: rgba(86, 171, 47, 0.1); border: 1px solid #56ab2f; color: #56ab2f; border-radius: 8px; }
+    .stWarning { background: rgba(243, 156, 18, 0.1); border: 1px solid #f39c12; color: #f39c12; border-radius: 8px; }
+    .stInfo { background: rgba(102, 126, 234, 0.1); border: 1px solid #667eea; color: #667eea; border-radius: 8px; }
+    .stSelectbox > div > div { background: white; border: 1px solid #e0e0e0; color: #333333; }
+    .stNumberInput > div > div > input { background: white; border: 1px solid #e0e0e0; color: #333333; }
+    .stForm { border: 1px solid #e0e0e0; background: white; }
+    .stMarkdown, .stText { color: #333333 !important; }
+    .stCaption { color: #636e72 !important; }
+    h1, h2, h3, h4, h5, h6 { color: #2d3436 !important; }
+    p { color: #333333 !important; line-height: 1.6; }
+    a { color: #667eea; }
+    a:hover { color: #764ba2; }
+    .stAlert, .stException, .stWarning, .stInfo, .stSuccess, .stError { color: #333333 !important; }
+    .stNumberInput label { color: #667eea !important; }
+    .stTabs [data-baseweb="tab-list"] { background: white; }
+    .stTabs [data-baseweb="tab"] { color: #667eea !important; }
+    .stTabs [aria-selected="true"] { border-bottom: 2px solid #667eea !important; color: #667eea !important; }
+</style>
+"""
+
+# 加载主题CSS
+st.markdown(get_theme_css(st.session_state.theme), unsafe_allow_html=True)
+
+# ─── 右上角窗帘式主题切换 ─────────────────────────────────────
+# 创建两列布局，左侧内容，右侧主题切换
+header_col1, header_col2 = st.columns([5, 1])
+with header_col2:
+    # 窗帘式滑块杆
+    theme = st.session_state.get("theme", "cyber")
+    if theme == "cyber":
+        st.markdown("""
+    <div style='text-align:right;padding:0.5rem'>
+        <div style='font-size:0.7rem;color:#00fff5;letter-spacing:1px;margin-bottom:0.3rem'>THEME</div>
+        <div style='display:flex;justify-content:flex-end;align-items:center;gap:0.5rem'>
+            <span style='font-size:1rem'>🌙</span>
+            <span style='font-size:0.6rem;color:#b0b0b0'>|</span>
+            <span style='font-size:1rem'>☀️</span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    else:
+        st.markdown("""
+    <div style='text-align:right;padding:0.5rem'>
+        <div style='font-size:0.7rem;color:#667eea;letter-spacing:1px;margin-bottom:0.3rem'>THEME</div>
+        <div style='display:flex;justify-content:flex-end;align-items:center;gap:0.5rem'>
+            <span style='font-size:1rem'>🌙</span>
+            <span style='font-size:0.6rem;color:#636e72'>|</span>
+            <span style='font-size:1rem'>☀️</span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    # 滑块控制主题（0=黑夜，1=白天）
+    theme_slider = st.slider(
+        "",
+        min_value=0,
+        max_value=1,
+        value=0 if st.session_state.theme == "cyber" else 1,
+        label_visibility="collapsed"
+    )
+    # 根据滑块位置切换主题
+    new_theme = "cyber" if theme_slider == 0 else "light"
+    if new_theme != st.session_state.theme:
+        st.session_state.theme = new_theme
+        st.rerun()
+
+
+# ─── 页面标题卡片函数 ─────────────────────────────────────
+def get_page_title_card(title_en: str, title_cn: str, icon: str, accent_color_cyber: str, accent_color_light: str) -> str:
+    """根据当前主题返回页面标题卡片HTML"""
+    theme = st.session_state.theme
+    if theme == "cyber":
+        return f"""
+    <div style="background: rgba(13, 13, 21, 0.9); border: 2px solid {accent_color_cyber}; border-radius: 4px; padding: 1.2rem 1.5rem; margin-bottom: 1rem; text-align: center; box-shadow: 0 0 25px rgba({accent_color_cyber.replace('#', '')}, 0.4);">
+        <div style="border-bottom: 1px solid {accent_color_cyber}; padding-bottom: 0.3rem; margin-bottom: 0.5rem;">
+            <span style="color: {accent_color_cyber}; font-size: 0.8rem; letter-spacing: 3px;">════════════════════</span>
+        </div>
+        <h1 style="color: {accent_color_cyber}; font-size: 1.6rem; margin-bottom: 0.4rem; text-shadow: 0 0 15px rgba({accent_color_cyber.replace('#', '')}, 0.8); letter-spacing: 2px;">{icon} {title_en}</h1>
+        <p style="color: #b0b0b0; font-size: 1rem; letter-spacing: 1px;">{title_cn}</p>
+        <div style="border-top: 1px solid {accent_color_cyber}; padding-top: 0.3rem; margin-top: 0.5rem;">
+            <span style="color: {accent_color_cyber}; font-size: 0.8rem; letter-spacing: 3px;">════════════════════</span>
+        </div>
+    </div>
+    """
+    else:
+        return f"""
+    <div style="background: white; border: 1px solid #e0e0e0; border-radius: 12px; padding: 1.2rem 1.5rem; margin-bottom: 1rem; text-align: center; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);">
+        <h1 style="color: {accent_color_light}; font-size: 1.6rem; margin-bottom: 0.4rem; letter-spacing: 1px;">{icon} {title_en}</h1>
+        <p style="color: #636e72; font-size: 1rem; letter-spacing: 1px;">{title_cn}</p>
+    </div>
+    """
+
+# ─── 搜索卡片函数 ─────────────────────────────────────
+def get_search_card_html(accent_color_cyber: str, accent_color_light: str) -> str:
+    """根据当前主题返回搜索卡片HTML"""
+    theme = st.session_state.theme
+    if theme == "cyber":
+        return f"""
+    <div style="background: rgba(13, 13, 21, 0.9); border: 1px solid {accent_color_cyber}; border-radius: 4px; padding: 0.5rem 1rem; box-shadow: 0 0 15px rgba({accent_color_cyber.replace('#', '')}, 0.2); margin-bottom: 1rem;">
+        <span style="color: {accent_color_cyber}; font-size: 0.7rem; letter-spacing: 2px;">[ SEARCH ]</span>
+    </div>
+    """
+    else:
+        return f"""
+    <div style="background: white; border: 1px solid #e0e0e0; border-radius: 8px; padding: 0.5rem 1rem; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06); margin-bottom: 1rem;">
+        <span style="color: {accent_color_light}; font-size: 0.8rem; letter-spacing: 2px; font-weight: 600;">[ SEARCH ]</span>
+    </div>
+    """
 
 # ─── 侧边栏导航 ─────────────────────────────────────────
 st.sidebar.title("📦 校园二手集市")
@@ -741,7 +1030,8 @@ page = st.sidebar.radio("导航", nav_options)
 
 # ─── 页面：发布闲置 ─────────────────────────────────────
 if page == "发布闲置":
-    st.header("📤 发布闲置")
+    # 页面标题
+    st.markdown(get_page_title_card("PUBLISH", "发布闲置", "📤", "#ff00ff", "#764ba2"), unsafe_allow_html=True)
     
     # 检查登录状态
     current_user = st.session_state.get("current_user")
@@ -792,7 +1082,9 @@ if page == "发布闲置":
 
 # ─── 页面：浏览商品 ─────────────────────────────────────
 elif page == "浏览商品":
-    st.header("🔍 全部商品")
+    # 页面标题
+    st.markdown(get_page_title_card("BROWSER", "全部商品", "🔍", "#00fff5", "#667eea"), unsafe_allow_html=True)
+    
     items = get_all_items()
 
     # 初始化分类筛选状态
@@ -800,6 +1092,7 @@ elif page == "浏览商品":
         st.session_state.cat_filter = "全部"
 
     # 搜索框
+    st.markdown(get_search_card_html("#00fff5", "#667eea"), unsafe_allow_html=True)
     keyword = st.text_input("搜索", placeholder="输入关键词…", label_visibility="collapsed")
 
     # 分类按钮组（点击即筛选）
@@ -822,7 +1115,17 @@ elif page == "浏览商品":
         filtered = [i for i in filtered if kw in i["title"].lower() or kw in i["description"].lower()]
 
     if not filtered:
-        st.info("暂无匹配商品")
+        # 赛博朋克空状态
+        st.markdown("""
+        <div style="text-align: center; padding: 3rem 1rem; background: rgba(13, 13, 21, 0.9); border: 1px solid #00fff5; border-radius: 4px; box-shadow: 0 0 20px rgba(0, 255, 245, 0.2);">
+            <div style="font-size: 4rem; margin-bottom: 1rem; filter: drop-shadow(0 0 10px #00fff5);">🔍</div>
+            <h3 style="color: #00fff5; margin-bottom: 0.5rem; text-shadow: 0 0 10px rgba(0, 255, 245, 0.5);">NO DATA FOUND</h3>
+            <p style="color: #b0b0b0;">暂无匹配商品</p>
+            <div style="margin-top: 1rem;">
+                <span style="color: #00fff5; font-size: 0.7rem; letter-spacing: 2px;">[ TRY OTHER FILTERS ]</span>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
     else:
         st.caption(f"共 {len(filtered)} 件商品")
         for item in filtered:
@@ -864,9 +1167,9 @@ elif page == "浏览商品":
                         st.caption(f"📩 共 {len(msgs)} 条留言")
                         for m in msgs:
                             st.markdown(f"""
-                            <div style="background:#fff8e1;border-radius:8px;padding:0.6rem 1rem;margin-bottom:0.5rem;border-left:3px solid #ffa000;color:#333333">
-                                <div><b>{m['name']}</b> <span class="meta">({m.get('contact','')})  · {m['time']}</span></div>
-                                <div style="margin-top:0.3rem">{m['content']}</div>
+                            <div style="background:rgba(255, 0, 255, 0.1);border-radius:4px;padding:0.6rem 1rem;margin-bottom:0.5rem;border-left:3px solid #ff00ff;color:#f0f0f0;box-shadow:0 0 8px rgba(255, 0, 255, 0.2)">
+                                <div style="color:#ff00ff;"><b>{m['name']}</b> <span class="meta">({m.get('contact','')})  · {m['time']}</span></div>
+                                <div style="margin-top:0.3rem;color:#f0f0f0">{m['content']}</div>
                             </div>
                             """, unsafe_allow_html=True)
                     else:
@@ -880,12 +1183,37 @@ elif page == "浏览商品":
 
 # ─── 页面：我的收藏 ─────────────────────────────────────
 elif page == "我的收藏":
-    st.header("❤️ 我的收藏")
+    # 页面标题
+    st.markdown(get_page_title_card("FAVORITES", "我的收藏", "❤️", "#ff6b6b", "#e74c3c"), unsafe_allow_html=True)
+    
     items = get_all_items()
     fav_items = [i for i in items if i["id"] in st.session_state.favorites]
 
     if not fav_items:
-        st.info("还没有收藏任何商品，去浏览页收藏吧！")
+        # 空状态
+        theme = st.session_state.theme
+        if theme == "cyber":
+            st.markdown("""
+            <div style="text-align: center; padding: 3rem 1rem; background: rgba(13, 13, 21, 0.9); border: 1px solid #ff6b6b; border-radius: 4px; box-shadow: 0 0 20px rgba(255, 107, 107, 0.2);">
+                <div style="font-size: 4rem; margin-bottom: 1rem; filter: drop-shadow(0 0 10px #ff6b6b);">🤍</div>
+                <h3 style="color: #ff6b6b; margin-bottom: 0.5rem; text-shadow: 0 0 10px rgba(255, 107, 107, 0.5);">EMPTY COLLECTION</h3>
+                <p style="color: #b0b0b0;">还没有收藏任何商品</p>
+                <div style="margin-top: 1rem;">
+                    <span style="color: #ff6b6b; font-size: 0.7rem; letter-spacing: 2px;">[ GO EXPLORE ]</span>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.markdown("""
+            <div style="text-align: center; padding: 3rem 1rem; background: white; border: 1px solid #e0e0e0; border-radius: 12px; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);">
+                <div style="font-size: 4rem; margin-bottom: 1rem;">🤍</div>
+                <h3 style="color: #e74c3c; margin-bottom: 0.5rem;">EMPTY COLLECTION</h3>
+                <p style="color: #636e72;">还没有收藏任何商品</p>
+                <div style="margin-top: 1rem;">
+                    <span style="color: #667eea; font-size: 0.8rem; letter-spacing: 2px; font-weight: 600;">[ GO EXPLORE ]</span>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
     else:
         st.caption(f"共 {len(fav_items)} 件收藏")
         for item in fav_items:
@@ -921,9 +1249,9 @@ elif page == "我的收藏":
                         st.caption(f"📩 共 {len(msgs)} 条留言")
                         for m in msgs:
                             st.markdown(f"""
-                            <div style="background:#fff8e1;border-radius:8px;padding:0.6rem 1rem;margin-bottom:0.5rem;border-left:3px solid #ffa000;color:#333333">
-                                <div><b>{m['name']}</b> <span class="meta">({m.get('contact','')})  · {m['time']}</span></div>
-                                <div style="margin-top:0.3rem">{m['content']}</div>
+                            <div style="background:rgba(255, 0, 255, 0.1);border-radius:4px;padding:0.6rem 1rem;margin-bottom:0.5rem;border-left:3px solid #ff00ff;color:#f0f0f0;box-shadow:0 0 8px rgba(255, 0, 255, 0.2)">
+                                <div style="color:#ff00ff;"><b>{m['name']}</b> <span class="meta">({m.get('contact','')})  · {m['time']}</span></div>
+                                <div style="margin-top:0.3rem;color:#f0f0f0">{m['content']}</div>
                             </div>
                             """, unsafe_allow_html=True)
                     else:
@@ -937,6 +1265,9 @@ elif page == "我的收藏":
 
 # ─── 页面：用户中心 ─────────────────────────────────────
 elif page == "用户中心":
+    # 页面标题
+    st.markdown(get_page_title_card("USER CENTER", "用户中心", "👤", "#ffd700", "#f39c12"), unsafe_allow_html=True)
+    
     current_user = st.session_state.get("current_user")
     if current_user:
         render_user_info_panel()

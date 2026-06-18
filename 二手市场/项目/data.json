@@ -1,6 +1,42 @@
 {
   "items": [
     {
+      "id": 19,
+      "title": "听力耳机",
+      "description": "一个",
+      "price": 10.0,
+      "category": "电子产品",
+      "contact": "987654321",
+      "messages_visibility": "public",
+      "user_id": 4,
+      "images": [],
+      "messages": [],
+      "status": "sold",
+      "created_at": "2026-06-18 23:18"
+    },
+    {
+      "id": 18,
+      "title": "自行车",
+      "description": "黑色",
+      "price": 200.0,
+      "category": "其他",
+      "contact": "987654321",
+      "messages_visibility": "public",
+      "user_id": 4,
+      "images": [],
+      "messages": [
+        {
+          "name": "222",
+          "contact": "987654321",
+          "content": "要",
+          "time": "06-19 00:56",
+          "user_id": 6
+        }
+      ],
+      "status": "available",
+      "created_at": "2026-06-18 23:17"
+    },
+    {
       "id": 17,
       "title": "二元店",
       "description": "你要的，我应有尽有，宿舍大甩卖！！！价格你定!(bushi)",
@@ -15,98 +51,17 @@
       "messages": [
         {
           "name": "222",
-          "contact": "123456789",
+          "contact": "987654321",
           "content": "要",
-          "time": "06-16 22:41",
-          "user_id": 1
-        },
-        {
-          "name": "333",
-          "contact": "135792468",
-          "content": "我也要",
-          "time": "06-16 22:42",
-          "user_id": 5
+          "time": "06-18 23:03",
+          "user_id": 6
         }
       ],
       "created_at": "2026-06-16 22:40"
-    },
-    {
-      "id": 13,
-      "title": "毛笔",
-      "description": "一套",
-      "price": 20.0,
-      "category": "电子产品",
-      "contact": "987654321",
-      "messages_visibility": "public",
-      "user_id": 4,
-      "images": [],
-      "messages": [],
-      "created_at": "2026-06-16 21:54"
-    },
-    {
-      "id": 12,
-      "title": "军训服",
-      "description": "160-165可穿",
-      "price": 20.0,
-      "category": "服饰",
-      "contact": "987654321",
-      "messages_visibility": "private",
-      "user_id": 4,
-      "messages": [
-        {
-          "name": "222",
-          "contact": "123456789",
-          "content": "要",
-          "time": "06-16 21:21",
-          "user_id": 1
-        },
-        {
-          "name": "333",
-          "contact": "135792468",
-          "content": "要",
-          "time": "06-16 21:22",
-          "user_id": 5
-        }
-      ],
-      "created_at": "2026-06-16 21:20"
-    },
-    {
-      "id": 11,
-      "title": "自行车",
-      "description": "黑色",
-      "price": 150.0,
-      "category": "其他",
-      "contact": "987654321",
-      "messages_visibility": "public",
-      "user_id": 4,
-      "messages": [
-        {
-          "name": "222",
-          "contact": "123456789",
-          "content": "要",
-          "time": "06-16 21:21",
-          "user_id": 1
-        },
-        {
-          "name": "333",
-          "contact": "135792468",
-          "content": "要",
-          "time": "06-16 21:22",
-          "user_id": 5
-        }
-      ],
-      "created_at": "2026-06-16 21:19"
     }
   ],
-  "next_id": 18,
+  "next_id": 20,
   "users": [
-    {
-      "id": 1,
-      "username": "222",
-      "password_hash": "c1f330d0aff31c1c87403f1e4347bcc21aff7c179908723535f2b31723702525",
-      "contact": "123456789",
-      "created_at": "2026-06-15 23:00"
-    },
     {
       "id": 4,
       "username": "111",
@@ -115,12 +70,22 @@
       "created_at": "2026-06-16 21:10"
     },
     {
-      "id": 5,
-      "username": "333",
-      "password_hash": "2926a2731f4b312c08982cacf8061eb14bf65c1a87cc5d70e864e079c6220731",
-      "contact": "135792468",
-      "created_at": "2026-06-16 21:22"
+      "id": 6,
+      "username": "222",
+      "password_hash": "c1f330d0aff31c1c87403f1e4347bcc21aff7c179908723535f2b31723702525",
+      "contact": "987654321",
+      "created_at": "2026-06-18 23:03"
     }
   ],
-  "next_user_id": 6
+  "next_user_id": 7,
+  "notifications": [
+    {
+      "id": 1,
+      "user_id": 6,
+      "message": "您留言的商品「军训服」已售出",
+      "item_id": 12,
+      "read": true,
+      "created_at": "2026-06-18 23:15"
+    }
+  ]
 }
