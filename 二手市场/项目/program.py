@@ -118,7 +118,7 @@ def upload_images(max_images: int = 5) -> list:
     return images_base64
 
 # ─── 数据层 ─────────────────────────────────────────────
-DATA_FILE = Path("data.json")
+DATA_FILE = Path(__file__).parent / "data.json"
 
 DEFAULT_DATA = {"items": [], "next_id": 1, "users": [], "next_user_id": 1}
 
@@ -959,7 +959,7 @@ with header_col2:
     """, unsafe_allow_html=True)
     # 滑块控制主题（0=黑夜，1=白天）
     theme_slider = st.slider(
-        "",
+        "主题",
         min_value=0,
         max_value=1,
         value=0 if st.session_state.theme == "cyber" else 1,
